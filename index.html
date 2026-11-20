@@ -110,6 +110,10 @@ header.top{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:spac
 .msg{background:var(--panel);border:1px dashed var(--line);border-radius:10px;padding:12px 16px;color:var(--muted);font-size:13px}
 .msg.err{border-color:var(--bad);color:var(--bad)}
 
+.mdset{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 16px;display:flex;flex-direction:column;gap:8px;font-size:13px}
+.mdset p{margin:0;color:var(--muted);max-width:90ch}
+.mdrow{display:flex;flex-wrap:wrap;gap:8px}
+.mdrow input{flex:1 1 280px;min-width:0;font:inherit;color:inherit;background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:5px 9px}
 /* AI 助理（本機橋接 → 使用者自己的 Claude 帳號）*/
 .aipanel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 16px;display:flex;flex-direction:column;gap:10px}
 .aih{display:flex;flex-wrap:wrap;align-items:center;gap:10px}
@@ -172,8 +176,16 @@ header.top{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:spac
       <h1>RD1~7 角色任務台</h1>
       <div class="sub">CF開發流程－業務開發需求單 · 需求大表 ＋ 執行總表</div>
     </div>
-    <div class="live"><span class="dot" id="dot"></span><span id="liveText">連線 monday 中…</span><button class="btn" id="refresh" type="button">重新整理</button></div>
+    <div class="live"><span class="dot" id="dot"></span><span id="liveText">連線 monday 中…</span><button class="btn" id="mdToggle" type="button" aria-expanded="false">monday 設定</button><button class="btn" id="refresh" type="button">重新整理</button></div>
   </header>
+
+  <section class="mdset" id="mdSet" hidden aria-label="monday 連線設定">
+    <b>monday 連線</b>
+    <p>在 claude.ai 開啟本頁時，會自動使用 claude.ai 的 monday 連線，不用設定。用其他方式開啟（例如 GitHub Pages）時，請貼上你自己的 monday 個人 API token：monday 左下角頭像 → Developers → My access tokens（選單名稱可能依 monday 版本略有不同）。</p>
+    <p>token 只存在這台電腦的瀏覽器，不會上傳到任何伺服器，也不會進入程式碼；資料只在你的瀏覽器和 monday 之間傳送。你能看到哪些看板，取決於你自己的 monday 權限。token 等同你的登入權限，請勿貼到不信任的頁面，也不要貼到公用電腦。</p>
+    <div class="mdrow"><input id="mdTok" type="password" placeholder="貼上 monday 個人 API token" autocomplete="off"><button class="btn pri" id="mdSave" type="button">儲存並載入</button><button class="btn" id="mdClear" type="button">清除 token</button></div>
+    <div class="bindst" id="mdSt"></div>
+  </section>
 
   <nav class="roles" id="roles" aria-label="切換角色"></nav>
 
@@ -570,14 +582,18 @@ function renderLive(){
   const dot=$("dot"),tx=$("liveText");
   if(S.dErr||S.eErr){dot.className="dot err";tx.textContent=errText(S.dErr||S.eErr);return}
   if(S.dOk&&S.eOk){dot.className="dot on";
-    const t=S.at?new Date(S.at):new Date();tx.textContent="monday 即時資料 · "+t.toLocaleTimeString("zh-TW",{hour:"2-digit",minute:"2-digit"})+" 更新";}
+    const t=S.at?new Date(S.at):new Date();tx.textContent=(MD.mode==="token"?"monday 即時資料（個人 token）· ":"monday 即時資料 · ")+t.toLocaleTimeString("zh-TW",{hour:"2-digit",minute:"2-digit"})+" 更新";}
   else{dot.className="dot";tx.textContent="讀取 monday 中…"}
 }
 function errText(e){
   const c=e&&e.code;
   if(c==="server_not_connected"||c==="server_not_found") return "請先在 claude.ai 設定 → 連接器加入 monday.com";
   if(c==="needs_reauth") return "monday.com 連線已過期，請到 claude.ai 設定 → 連接器重新連線";
-  if(c==="not_in_manifest"||c==="not_granted"||c==="consent_required") return "尚未允許此頁讀取 monday.com，只顯示任務說明";
+  if(c==="md_auth") return "monday token 無效或已過期，請按右上「monday 設定」重新貼上";
+  if(c==="md_rate") return "monday API 請求太頻繁或查詢太大，請稍後再按重新整理";
+  if(c==="md_net") return "連不上 monday API（網路或瀏覽器限制），請稍後再按重新整理";
+  if(c==="md_err") return "monday API 回傳錯誤："+((e&&e.msg)||"未知");
+  if(c==="not_in_manifest"||c==="not_granted"||c==="consent_required") return "尚未取得 monday 資料，只顯示任務說明。不是在 claude.ai 開啟時，請按右上「monday 設定」貼上個人 token";
   if(c==="approval_required") return "讀取 monday 需要你的同意，請按「重新整理」";
   return "暫時讀不到 monday 資料（"+(c||"錯誤")+"），稍後再按重新整理";
 }
@@ -847,20 +863,99 @@ function take(kind,result){
 const AUTHZ=["needs_reauth","server_not_connected","server_not_found","not_in_manifest","blocked_by_policy","not_granted","capability_disabled","capability_removed","consent_required"];
 let mcp=null;
 function onErr(kind,err){
+  if(MD.mode==="token") return; /* 已改用個人 token，忽略 claude.ai 連線的錯誤 */
   if(kind==="D") S.dErr=err;else S.eErr=err;
-  if(err&&AUTHZ.indexOf(err.code)>=0){if(kind==="D"){S.D=[];S.dOk=false}else{S.E=[];S.eOk=false}}
+  if(err&&AUTHZ.indexOf(err.code)>=0){if(kind==="D"){S.D=[];S.dOk=false}else{S.E=[];S.eOk=false}
+    if(MD.tok) startToken()}
 }
+
+/* ---------- monday 個人 token：claude.ai 連線不可用時，瀏覽器直接呼叫 monday API ---------- */
+const MD={tok:"",mode:"",timer:null};
+try{MD.tok=localStorage.getItem("rd17-md-token")||""}catch(_){}
+const MD_ITEM="id name group{id title} column_values(ids:$cols){id text ...on MirrorValue{display_value} ...on BoardRelationValue{display_value}}";
+const MD_Q1="query($ids:[ID!],$limit:Int,$qp:ItemsQuery,$cols:[String!]){boards(ids:$ids){items_page(limit:$limit,query_params:$qp){cursor items{"+MD_ITEM+"}}}}";
+const MD_Q2="query($c:String!,$limit:Int,$cols:[String!]){next_items_page(limit:$limit,cursor:$c){cursor items{"+MD_ITEM+"}}}";
+async function mdGql(query,variables){
+  let r;
+  try{r=await fetch("https://api.monday.com/v2",{method:"POST",headers:{"content-type":"application/json",Authorization:MD.tok},body:JSON.stringify({query,variables})})}
+  catch(_){throw {code:"md_net"}}
+  if(r.status===401||r.status===403) throw {code:"md_auth"};
+  if(r.status===429) throw {code:"md_rate"};
+  const j=await r.json().catch(()=>null);
+  if(!j) throw {code:"md_err",msg:"HTTP "+r.status};
+  if(j.errors&&j.errors.length){
+    const m=String(j.errors[0].message||""),c=String((j.errors[0].extensions||{}).code||"");
+    if(/unauthor|not authenticated|invalid.*token/i.test(m+" "+c)) throw {code:"md_auth"};
+    if(/complexity|rate.?limit|too many/i.test(m+" "+c)) throw {code:"md_rate"};
+    throw {code:"md_err",msg:m.slice(0,160)};
+  }
+  return j.data;
+}
+async function mdItems(input){
+  const f=input.filters[0];
+  let data=await mdGql(MD_Q1,{ids:[String(input.boardId)],limit:500,cols:input.columnIds,qp:{rules:[{column_id:f.columnId,compare_value:f.compareValue,operator:f.operator}]}});
+  let page=data&&data.boards&&data.boards[0]&&data.boards[0].items_page;
+  if(!page) throw {code:"md_err",msg:"讀不到看板 "+input.boardId+"（可能沒有權限）"};
+  const out=[];
+  for(let i=0;i<20&&page;i++){
+    (page.items||[]).forEach(it=>{const cv={};(it.column_values||[]).forEach(c=>{cv[c.id]=(c.display_value!=null&&c.display_value!=="")?c.display_value:(c.text||null)});out.push({id:it.id,name:it.name,group:it.group,column_values:cv})});
+    if(!page.cursor) break;
+    data=await mdGql(MD_Q2,{c:page.cursor,limit:500,cols:input.columnIds});
+    page=data&&data.next_items_page;
+  }
+  return out;
+}
+async function mdLoad(){
+  S.dErr=S.eErr=null;renderLive();
+  const res=await Promise.allSettled([mdItems(D_INPUT),mdItems(E_INPUT)]);
+  ["D","E"].forEach((kind,i)=>{
+    const r=res[i];
+    if(r.status==="fulfilled"){take(kind,{payload:{items:r.value},cache:{storedAt:Date.now()}});return}
+    const er=r.reason&&r.reason.code?r.reason:{code:"md_err",msg:String(r.reason)};
+    if(kind==="D") S.dErr=er;else S.eErr=er;
+    if(er.code==="md_auth"){if(kind==="D"){S.D=[];S.dOk=false}else{S.E=[];S.eOk=false}}
+  });
+  render();
+}
+async function startToken(){
+  MD.mode="token";clearInterval(MD.timer);
+  MD.timer=setInterval(mdLoad,300000);
+  await mdLoad();
+}
+function mdSay(cls,txt){const e=$("mdSt");e.className="bindst "+cls;e.textContent=txt}
+function mdIdle(){mdSay("",MD.tok?"已儲存 token（只存在這台瀏覽器）。":"尚未設定 token。")}
+$("mdToggle").addEventListener("click",()=>{const s=$("mdSet");s.hidden=!s.hidden;$("mdToggle").setAttribute("aria-expanded",s.hidden?"false":"true");if(!s.hidden) $("mdTok").focus()});
+$("mdSave").addEventListener("click",async()=>{
+  const t=$("mdTok").value.replace(/[\s"'「」“”]/g,"");
+  if(t.length<20){mdSay("bad","token 太短，請確認是完整複製。");return}
+  MD.tok=t;try{localStorage.setItem("rd17-md-token",t)}catch(_){}
+  $("mdTok").value="";
+  if(mcp&&S.dOk&&S.eOk&&MD.mode!=="token"){mdSay("ok","✔ 已儲存。目前已能用 claude.ai 的 monday 連線讀資料，token 暫時用不到。");return}
+  mdSay("","載入中…");
+  await startToken();
+  const er=S.dErr||S.eErr;
+  if(er) mdSay("bad",errText(er));else mdSay("ok","✔ 已連線，資料已載入。");
+});
+$("mdClear").addEventListener("click",()=>{
+  MD.tok="";try{localStorage.removeItem("rd17-md-token")}catch(_){}
+  clearInterval(MD.timer);
+  if(MD.mode==="token"){MD.mode="";S.D=[];S.E=[];S.dOk=S.eOk=false;S.dErr=S.eErr={code:"not_granted"};render()}
+  mdIdle();
+});
+mdIdle();
+function noMcp(){if(MD.tok){startToken()}else{S.dErr=S.eErr={code:"not_granted"};render()}}
 function start(){
-  if(!window.claude||!window.claude.use){S.dErr=S.eErr={code:"not_granted"};render();return}
+  if(!window.claude||!window.claude.use){noMcp();return}
   window.claude.use("mcp").then(m=>{
     mcp=m;
-    if(!m){S.dErr=S.eErr={code:"not_granted"};render();return}
+    if(!m){noMcp();return}
     const opt={cache:{staleTime:60000,gcTime:3600000},refetchInterval:300000};
     m.watchTool(SERVER,TOOL,D_INPUT,ev=>{if(ev.type==="data") take("D",ev.result);else onErr("D",ev.error);render()},opt);
     m.watchTool(SERVER,TOOL,E_INPUT,ev=>{if(ev.type==="data") take("E",ev.result);else onErr("E",ev.error);render()},opt);
-  }).catch(()=>{S.dErr=S.eErr={code:"not_granted"};render()});
+  }).catch(()=>noMcp());
 }
 $("refresh").addEventListener("click",()=>{
+  if(MD.mode==="token"){mdLoad();return}
   if(!mcp){start();return}
   S.dErr=S.eErr=null;renderLive();
   Promise.allSettled([
