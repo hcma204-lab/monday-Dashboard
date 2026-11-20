@@ -125,6 +125,7 @@ header.top{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:spac
 .btn:disabled{opacity:.5;cursor:not-allowed}
 .aiact{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
 .aiintro{margin:0;font-size:13px;color:var(--muted)}
+.aiintro a{color:var(--accent);font-weight:500}
 #aiBody{display:flex;flex-direction:column;gap:10px}
 .aiform{display:flex;flex:1 1 320px;gap:8px;min-width:0}
 .aiform input,.aiset input{flex:1;min-width:0;font:inherit;color:inherit;background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:5px 9px}
@@ -230,7 +231,7 @@ header.top{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:spac
         <button class="btn" id="btnSaveKey" type="button">儲存並偵測</button>
       </details>
     </div>
-    <p class="aiintro" id="aiIntro">AI 助理（今日重點、問答、催辦草稿、週報）需要連接你自己的 Claude 帳號。在 claude.ai 開啟本頁會自動連接；用其他方式開啟時，請按右上「設定」。</p>
+    <p class="aiintro" id="aiIntro">AI 助理（今日重點、問答、催辦草稿、週報）請到 claude.ai 的 <a href="https://claude.ai/artifact/FPfnCUVPQW3w8RzL3fFiBw" target="_blank" rel="noopener">AI 版任務台</a> 使用，會自動連接你登入的 Claude，不用安裝或設定。需要先被分享才打得開，打不開請向管理者索取權限。進階：也可按右上「設定」改用本機橋接。</p>
     <div id="aiBody" hidden>
     <div class="aiact">
       <button class="btn pri" id="aiBrief" type="button">今日重點（目前角色）</button>
