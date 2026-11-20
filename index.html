@@ -124,6 +124,8 @@ header.top{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:spac
 .btn.pri{background:var(--accent);border-color:var(--accent);color:#fff}
 .btn:disabled{opacity:.5;cursor:not-allowed}
 .aiact{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.aiintro{margin:0;font-size:13px;color:var(--muted)}
+#aiBody{display:flex;flex-direction:column;gap:10px}
 .aiform{display:flex;flex:1 1 320px;gap:8px;min-width:0}
 .aiform input,.aiset input{flex:1;min-width:0;font:inherit;color:inherit;background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:5px 9px}
 .aiset{display:flex;flex-direction:column;gap:8px;border-top:1px dashed var(--line);padding-top:10px;font-size:13px}
@@ -219,7 +221,7 @@ header.top{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:spac
       <button class="btn" id="aiToggle" type="button" aria-expanded="false">設定</button>
     </div>
     <div class="aiset" id="aiSet" hidden>
-      <p>使用你自己已登入的 Claude 帳號（含公司企業版），<b>不需要 API key</b>、不扣 API 額度。在 claude.ai 開啟本頁時會自動連接，不用設定。若用檔案或其他方式開啟，才需要啟動本機橋接：雙擊 <code>start-claude-bridge.bat</code>，再按「綁定」；待辦資料只會送到你電腦上的橋接程式（127.0.0.1）。</p>
+      <p>使用你自己已登入的 Claude 帳號（含公司企業版），<b>不需要 API key</b>、不扣 API 額度。在 claude.ai 開啟本頁時會自動連接，不用設定。若用檔案或其他方式開啟，才需要在自己電腦啟動本機橋接：雙擊 <code>start-claude-bridge.bat</code>，再按「綁定」；待辦資料只會送到你電腦上的橋接程式（127.0.0.1）。沒有這個檔案的人，請到 <a href="https://github.com/hcma204-lab/monday-Dashboard" target="_blank" rel="noopener">GitHub 專案頁</a> 按 Code → Download ZIP 下載（需安裝 Node.js 18 以上，並已登入 Claude 桌面 App 或 Claude Code）。</p>
       <div class="bindst" id="bindSt">尚未偵測。</div>
       <div class="airow"><button class="btn" id="btnBind" type="button">綁定我的 Claude 帳號</button><button class="btn" id="btnBindCheck" type="button">偵測狀態</button></div>
       <details class="adv" id="aiAdv"><summary>手動貼連線碼（用檔案或內嵌頁面開啟時，請用這個）</summary>
@@ -228,6 +230,8 @@ header.top{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:spac
         <button class="btn" id="btnSaveKey" type="button">儲存並偵測</button>
       </details>
     </div>
+    <p class="aiintro" id="aiIntro">AI 助理（今日重點、問答、催辦草稿、週報）需要連接你自己的 Claude 帳號。在 claude.ai 開啟本頁會自動連接；用其他方式開啟時，請按右上「設定」。</p>
+    <div id="aiBody" hidden>
     <div class="aiact">
       <button class="btn pri" id="aiBrief" type="button">今日重點（目前角色）</button>
       <button class="btn" id="aiDigest" type="button" title="把逾期與 3 天內到期的單，依負責人各產生一則催辦訊息">人員催辦彙整</button>
@@ -242,6 +246,7 @@ header.top{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:spac
       <div class="chips" id="aiChips"></div>
       <div class="msgs" id="aiMsgs" hidden></div>
       <form class="aiform" id="aiForm"><input id="aiQ" placeholder="直接問，例如：RD-001 現在卡在哪？王小明有哪些逾期單？成本分析要做什麼？" autocomplete="off"><button class="btn pri" id="aiAsk" type="submit">詢問</button><button class="btn" id="aiClear" type="button">清除對話</button></form>
+    </div>
     </div>
   </section>
 
@@ -623,7 +628,9 @@ function bridgeBase(){
   return loopback(u)?u:BRIDGE_DEFAULT; /* 只允許本機位址，避免待辦資料被送到其他主機 */
 }
 function bindSay(cls,txt){const e=$("bindSt");e.className="bindst "+cls;e.textContent=txt}
-function aiBadge(cls,txt){const b=$("aiBadge");b.className="aibadge "+cls;b.textContent=txt}
+function aiBadge(cls,txt){const b=$("aiBadge");b.className="aibadge "+cls;b.textContent=txt;aiShow()}
+/* 沒有連上 Claude 時，只顯示簡短說明；連上（或已存連線碼）後才顯示功能按鈕 */
+function aiShow(){const on=!!(SAMPLE||AI.key);$("aiBody").hidden=!on;$("aiIntro").hidden=on}
 /* 在 claude.ai 開啟時，直接用 sample 能力（你目前登入的 Claude），不需要橋接；其他開啟方式才用本機橋接 */
 let SAMPLE=null;
 function aiBadgeInit(){aiBadge(SAMPLE?"ok":"",SAMPLE?"已連接 Claude":AI.key?"已設定連線碼":"未綁定")}
