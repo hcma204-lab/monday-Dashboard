@@ -20,7 +20,7 @@ const http = require('http'), fs = require('fs'), os = require('os'), path = req
 const { spawn, spawnSync } = require('child_process');
 
 const HOST = '127.0.0.1';
-const PORT = Number(process.env.PORT || 8787);
+const PORT = Number(process.env.PORT || 8788);
 const TIMEOUT_MS = Number(process.env.TIMEOUT_MS || 180000);        // 單次呼叫最長等待
 const MAX_BODY = 600 * 1024;                                         // 單次請求大小上限
 const TOKEN_FILE = path.join(os.homedir(), '.rd17-bridge-token');
@@ -169,6 +169,14 @@ const server = http.createServer((req, res) => {
   if (req.method === 'OPTIONS') { res.writeHead(204, cors); return res.end(); }
 
   const url = req.url.split('?')[0];
+  if (req.method === 'GET' && (url === '/' || url === '/index.html')) {   // 本機版入口：http://127.0.0.1:PORT/ 直接開儀表板（與橋接同源，瀏覽器不會擋「公開網站連本機」）
+    try {
+      const html = fs.readFileSync(path.join(__dirname, 'index.html'));
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', 'x-frame-options': 'DENY', 'referrer-policy': 'no-referrer' });
+      return res.end(html);
+    } catch { res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' }); return res.end('找不到 index.html（請把 index.html 放在 claude-bridge.js 同一個資料夾）。'); }
+  }
+  if (req.method === 'GET' && url === '/favicon.ico') { res.writeHead(204); return res.end(); }
   if (req.method === 'GET' && url === '/status')                      // 不需連線碼、不含機密：讓網頁偵測橋接是否啟動、Claude 是否已登入
     return send(200, { bridge: true, version: 2, claude: !!CLAUDE, loggedIn: loginStateCached(), loginRunning: !!loginProc });
   if (req.method === 'GET' && url === '/pair') {
@@ -210,7 +218,7 @@ const server = http.createServer((req, res) => {
   });
 });
 server.on('error', e => {
-  if (e.code === 'EADDRINUSE') console.error(`\n連接埠 ${PORT} 已被使用。橋接程式可能已經在執行；若不是，請用 set PORT=8788 換一個埠再啟動。`);
+  if (e.code === 'EADDRINUSE') console.error(`\n連接埠 ${PORT} 已被使用。橋接程式可能已經在執行；若不是，請用 set PORT=8789 換一個埠再啟動。`);
   else console.error('啟動失敗：', e.message);
   process.exit(1);
 });
@@ -219,11 +227,12 @@ server.listen(PORT, HOST, () => {
   console.log(' Claude 橋接程式 已啟動（只接受本機連線）');
   console.log('══════════════════════════════════════════════');
   console.log(' 網址：http://' + HOST + ':' + PORT);
+  console.log(' 本機版任務台（AI 綁定最穩，會自動綁定）：http://' + HOST + ':' + PORT + '/');
   console.log(' 連線碼：' + TOKEN);
   console.log(' Claude：' + (CLAUDE || '找不到！請先安裝 Claude 桌面 App 或 Claude Code'));
   const li = loginState();
   console.log(' 登入狀態：' + (li === true ? '✔ 已登入' : li === false ? '✖ 尚未登入 → 請先雙擊 login-claude.bat 登入公司帳號（只需一次）' : '無法判斷'));
-  console.log('\n 最簡單：任務台「🤖 AI 助理 → 設定 → 綁定我的 Claude 帳號」，會自動完成，不用貼連線碼。');
-  console.log(' 手動：在「進階：手動設定」貼上上面的連線碼。');
+  console.log('\n 最簡單：開上面的「本機版任務台」網址，AI 會自動綁定，不用貼連線碼。');
+  console.log(' 其他網址開啟時：在「AI 助理 → 設定 → 手動貼連線碼」貼上上面的連線碼。');
   console.log(' 使用期間請保持這個視窗開著；關閉視窗即停止。\n');
 });

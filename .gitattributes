@@ -1,2 +1,3 @@
-*.bat text eol=crlf
+*.bat -text
+*.ps1 -text
 *.js text eol=lf
